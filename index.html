@@ -3,33 +3,41 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>倉儲雲端雙向系統 - 1D 優化版</title>
+    <title>程式夥伴 - 倉儲任務雙向系統</title>
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://unpkg.com/html5-qrcode"></script>
 
     <style>
-        :root { --primary: #2196F3; --success: #4CAF50; --danger: #f44336; --bg: #f8f9fa; }
-        body { font-family: -apple-system, sans-serif; background: var(--bg); margin: 0; padding: 10px; }
+        :root { --primary: #2196F3; --success: #4CAF50; --danger: #f44336; --bg: #f5f7f9; }
+        body { font-family: -apple-system, "Segoe UI", sans-serif; background: var(--bg); margin: 0; padding: 10px; color: #333; }
         .card { background: white; border-radius: 12px; padding: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 12px; }
-        h2 { margin: 0 0 10px 0; color: var(--primary); font-size: 1.1rem; }
+        h2 { margin: 0 0 12px 0; color: var(--primary); font-size: 1.1rem; border-left: 4px solid var(--primary); padding-left: 10px; }
         
         /* 任務列表 */
-        .task-item { border: 1px solid #ddd; border-radius: 8px; padding: 15px; margin-bottom: 8px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; background: #fff; }
-        .task-item:active { background: #e3f2fd; }
-        
-        /* 相機區域優化 */
-        #reader { width: 100%; border-radius: 8px; overflow: hidden; background: #000; }
-        #reader__scan_region video { object-fit: cover !important; } /* 避免畫面變形 */
+        .task-item { border: 1px solid #ddd; border-radius: 8px; padding: 15px; margin-bottom: 8px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; background: #fff; transition: 0.2s; }
+        .task-item:active { background: #e3f2fd; transform: scale(0.98); }
+        .source-tag { font-size: 10px; padding: 2px 6px; border-radius: 4px; background: #eee; color: #666; }
 
-        .item-row { display: flex; justify-content: space-between; padding: 12px; border-bottom: 1px solid #eee; border-left: 5px solid #ccc; }
-        .item-row.completed { border-left-color: var(--success); background: #f1f8e9; }
-        
-        .btn { padding: 12px; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; width: 100%; font-size: 15px; margin-top: 5px; }
+        /* 相機與掃描區域 */
+        #reader { width: 100%; border-radius: 8px; overflow: hidden; background: #000; }
+        #reader__scan_region video { object-fit: cover !important; }
+
+        .item-row { display: flex; justify-content: space-between; padding: 12px; border-bottom: 1px solid #eee; border-left: 5px solid #ccc; transition: 0.3s; }
+        .item-row.completed { border-left-color: var(--success); background: #f1f8e9; opacity: 0.8; }
+        .item-row.active-hit { background: #fff9c4; transform: scale(1.02); }
+
+        /* 按鈕與輸入 */
+        .btn { padding: 12px; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; width: 100%; font-size: 15px; transition: 0.2s; }
         .btn-blue { background: var(--primary); color: white; }
         .btn-green { background: var(--success); color: white; }
+        .btn-grey { background: #555; color: white; }
+        
+        input[type="text"] { width: 100%; padding: 14px; margin-top: 12px; border: 2px solid #ddd; border-radius: 8px; box-sizing: border-box; font-size: 16px; outline: none; }
+        input[type="text"]:focus { border-color: var(--primary); }
+
+        /* 錯誤警告遮罩 */
         .overlay { display: none; position: fixed; top:0; left:0; width:100%; height:100%; background:rgba(244, 67, 54, 0.95); z-index: 10000; color:white; flex-direction:column; justify-content:center; align-items:center; text-align:center; padding: 20px; box-sizing: border-box; }
-        input[type="text"] { width: 100%; padding: 12px; margin-top: 10px; border: 2px solid #ddd; border-radius: 8px; box-sizing: border-box; font-size: 16px; }
     </style>
 </head>
 <body>
@@ -37,103 +45,114 @@
     <div id="taskSection">
         <div class="card">
             <div style="display: flex; justify-content: space-between; align-items: center;">
-                <h2>📋 雲端任務清單</h2>
-                <button onclick="fetchCloudTasks()" style="border:1px solid var(--primary); background:none; color:var(--primary); padding:5px 10px; border-radius:5px;">🔄 同步資料</button>
+                <h2>📦 雲端任務中心</h2>
+                <button onclick="fetchCloudTasks()" style="border:1px solid var(--primary); background:none; color:var(--primary); padding:5px 12px; border-radius:5px; font-weight:bold; cursor:pointer;">🔄 同步任務</button>
             </div>
-            <div id="syncStatus" style="font-size: 12px; color: #888; margin: 5px 0;">連線狀態：待機</div>
+            <div id="syncStatus" style="font-size: 12px; color: #888; margin-bottom: 10px;">最後更新：尚未同步</div>
             <div id="taskList"></div>
         </div>
+
         <div class="card">
             <h2>📁 手動導入 Excel</h2>
             <input type="file" id="fileInput" accept=".xlsx, .xls, .csv">
+            <p style="font-size: 11px; color: #999; margin-top: 8px;">(格式：訂單編號, 條碼, 品項名稱, 應出數量)</p>
         </div>
     </div>
 
     <div id="workArea" style="display: none;">
         <div class="card">
-            <button onclick="backToTasks()" style="background:none; border:none; color:#666; margin-bottom:10px; cursor:pointer;">⬅ 返回列表</button>
-            <h3 id="activeOrderTitle" style="margin:0;">單號：---</h3>
+            <button onclick="backToTasks()" style="background:none; border:none; color:#666; margin-bottom:12px; cursor:pointer; font-weight:bold;">⬅ 返回任務清單</button>
+            <h3 id="activeOrderTitle" style="margin:0 0 10px 0;">單號：---</h3>
             
-            <div id="reader" style="margin-top:10px;"></div>
+            <div id="reader"></div>
             
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px;">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px;">
                 <button class="btn btn-blue" onclick="startCamera()">📷 開啟相機</button>
-                <button class="btn" style="background:#555; color:white;" onclick="stopCamera()">關閉相機</button>
+                <button class="btn btn-grey" onclick="stopCamera()">關閉相機</button>
             </div>
-            <input type="text" id="scanInput" placeholder="或使用掃描槍點此輸入...">
+            <input type="text" id="scanInput" placeholder="請點此處使用掃描槍輸入...">
         </div>
 
         <div class="card">
             <div id="itemList"></div>
-            <button class="btn btn-green" onclick="uploadToCloud()" style="margin-top:20px;">☁️ 回傳結果至雲端</button>
+            <button class="btn btn-green" onclick="uploadToCloud()" style="margin-top:20px;">☁️ 同步回傳至 Google 試算表</button>
+            <button onclick="exportResults()" style="width:100%; background:none; border:none; color:#888; font-size:12px; margin-top:15px; cursor:pointer; text-decoration:underline;">下載備援 Excel 報表</button>
         </div>
     </div>
 
-    <div id="errorOverlay" class="overlay" onclick="this.style.display='none'">
-        <h1 style="font-size:60px; margin:0;">⚠️</h1>
+    <div id="errorOverlay" class="overlay" onclick="this.style.display='none'; document.getElementById('scanInput').focus();">
+        <h1 style="font-size:70px; margin:0;">⚠️</h1>
         <h2 id="errorMsg" style="margin:10px 0;">條碼錯誤</h2>
-        <p>點擊螢幕關閉警告</p>
+        <p>點擊螢幕任何地方關閉</p>
     </div>
 
     <audio id="sndOk" src="https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3"></audio>
     <audio id="sndError" src="https://assets.mixkit.co/active_storage/sfx/2573/2573-preview.mp3"></audio>
 
     <script>
-        // --- 設定區 ---
-        const CLOUD_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQEuF4JQd8X9LuwADhI90Uj2_xlu9qROMPBPUNJGKM3RxprWX_4vVYAlhXWdLSZlXgOJhpm4ozv1_eG/pub?output=csv";
-        const REPORT_API = "https://script.google.com/macros/s/AKfycbwxGXUGExSlSV3g_Wo73BtFSfqkZD4sCQRgGTq7R8X_9S4N1BISJK1K2jZLsiTsNV_V/exec";
+        // --- 核心設定區 ---
+        const CLOUD_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQEuF4JQd8X9LuwADhI90Uj2_xlu9qROMPBPUNJGKM3RxprWX_4vVYAlhXWdLSZlXgOJhpm4ozv1_eG/pub?output=csv";
+        const REPORT_API_URL = "https://script.google.com/macros/s/AKfycbwxGXUGExSlSV3g_Wo73BtFSfqkZD4sCQRgGTq7R8X_9S4N1BISJK1K2jZLsiTsNV_V/exec";
 
         let allOrders = {}; 
         let currentOrderId = "";
         let html5QrCode;
 
-        // --- 1. 雲端抓取任務 ---
+        // 1. 抓取雲端任務
         async function fetchCloudTasks() {
             const status = document.getElementById('syncStatus');
             try {
-                status.innerText = "連線中...";
-                const res = await fetch(CLOUD_URL + "&t=" + new Date().getTime());
-                const csv = await res.text();
+                status.innerText = "正在連線雲端...";
+                const response = await fetch(CLOUD_CSV_URL + "&t=" + new Date().getTime());
+                const csvText = await response.text();
                 
-                if (csv.trim().startsWith("<")) {
-                    throw new Error("格式錯誤：請確保試算表已發布為 CSV");
-                }
+                if (csvText.trim().startsWith("<")) throw new Error("發布格式非 CSV");
 
-                const wb = XLSX.read(csv, { type: 'string' });
-                const json = XLSX.utils.sheet_to_json(wb.Sheets[workbook.SheetNames[0]] || wb.Sheets[Object.keys(wb.Sheets)[0]]);
+                const workbook = XLSX.read(csvText, { type: 'string' });
+                const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                const json = XLSX.utils.sheet_to_json(firstSheet);
                 
-                Object.keys(allOrders).forEach(k => { if(allOrders[k][0].source === "雲端") delete allOrders[k]; });
-                processJson(json, "雲端");
-                status.innerText = "✅ 同步成功：" + new Date().toLocaleTimeString();
+                // 清理舊的雲端任務紀錄，保留手動匯入
+                Object.keys(allOrders).forEach(id => {
+                    if (allOrders[id][0].source === "雲端") delete allOrders[id];
+                });
+
+                if (json.length > 0) {
+                    processData(json, "雲端");
+                    status.innerText = "最後更新：" + new Date().toLocaleTimeString();
+                } else {
+                    status.innerText = "雲端暫無任務資料";
+                }
             } catch (e) {
-                status.innerText = "❌ 連線失敗：" + e.message;
+                status.innerText = "❌ 同步失敗：" + e.message;
+                console.error(e);
             }
         }
 
-        // --- 2. 本地 Excel 導入 ---
+        // 2. 本地 Excel 導入
         document.getElementById('fileInput').addEventListener('change', (e) => {
             const file = e.target.files[0];
             if (!file) return;
             const reader = new FileReader();
             reader.onload = (evt) => {
                 const data = new Uint8Array(evt.target.result);
-                const workbook = XLSX.read(data, { type: 'array' });
-                const json = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
-                processJson(json, "手動匯入");
+                const wb = XLSX.read(data, { type: 'array' });
+                const json = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+                processData(json, "手動匯入");
             };
             reader.readAsArrayBuffer(file);
         });
 
-        function processJson(json, source) {
+        function processData(json, sourceName) {
             json.forEach(row => {
-                const id = String(row['訂單編號'] || "未知").trim();
+                const id = String(row['訂單編號'] || "未知單號").trim();
                 if (!allOrders[id]) allOrders[id] = [];
                 allOrders[id].push({
                     barcode: String(row['條碼'] || "").trim(),
-                    name: row['品項名稱'] || "無名稱",
+                    name: row['品項名稱'] || "無品名",
                     target: parseInt(row['應出數量'] || 0),
                     current: 0,
-                    source: source
+                    source: sourceName
                 });
             });
             renderTaskList();
@@ -142,88 +161,125 @@
         function renderTaskList() {
             const list = document.getElementById('taskList');
             list.innerHTML = '';
-            Object.keys(allOrders).forEach(id => {
-                const div = document.createElement('div');
-                div.className = 'task-item';
-                div.innerHTML = `<div><strong>${id}</strong><br><small>${allOrders[id].length} 項</small></div><span>➡️</span>`;
-                div.onclick = () => {
-                    currentOrderId = id;
-                    document.getElementById('taskSection').style.display = 'none';
-                    document.getElementById('workArea').style.display = 'block';
-                    document.getElementById('activeOrderTitle').innerText = `任務單號：${id}`;
-                    renderItems();
-                };
-                list.appendChild(div);
+            const ids = Object.keys(allOrders);
+            if(ids.length === 0) list.innerHTML = "<p style='color:#999; font-size:14px;'>目前暫無任務，請同步雲端或導入檔案</p>";
+            
+            ids.forEach(id => {
+                const item = document.createElement('div');
+                item.className = 'task-item';
+                item.innerHTML = `<div><strong>${id}</strong><br><small>${allOrders[id].length} 個品項</small></div>
+                                 <span class="source-tag">${allOrders[id][0].source}</span>`;
+                item.onclick = () => openTask(id);
+                list.appendChild(item);
             });
         }
 
-        // --- 3. 相機功能 (1D 條碼優化) ---
+        function openTask(id) {
+            currentOrderId = id;
+            document.getElementById('taskSection').style.display = 'none';
+            document.getElementById('workArea').style.display = 'block';
+            document.getElementById('activeOrderTitle').innerText = `單號：${id}`;
+            renderItems();
+        }
+
+        // 3. 掃描核心與 1D 優化
         function startCamera() {
             if (!html5QrCode) html5QrCode = new Html5Qrcode("reader");
             
-            // 重要：一維條碼優化設定
             const config = { 
-                fps: 30, // 提高幀率
-                qrbox: { width: 320, height: 120 }, // 長方形框，適合掃條碼
-                aspectRatio: 1.7777, // 強制 16:9
+                fps: 20, 
+                qrbox: { width: 300, height: 120 }, // 扁平長方形適合一維條碼
+                aspectRatio: 1.7777,
                 formatsToSupport: [ 
                     Html5QrcodeSupportedFormats.CODE_128,
                     Html5QrcodeSupportedFormats.EAN_13,
-                    Html5QrcodeSupportedFormats.CODE_39,
-                    Html5QrcodeSupportedFormats.UPC_A
+                    Html5QrcodeSupportedFormats.CODE_39
                 ]
             };
 
             html5QrCode.start({ facingMode: "environment" }, config, handleBarcode)
-            .catch(err => alert("相機啟動失敗，請確認是否為 HTTPS 環境"));
+            .catch(err => alert("相機開啟失敗：請檢查是否為 HTTPS 環境並允許權限"));
         }
 
         function handleBarcode(code) {
             const items = allOrders[currentOrderId];
             const item = items.find(i => i.barcode === code);
+            
             if (item) {
                 if (item.current < item.target) {
                     item.current++;
                     document.getElementById('sndOk').play();
                     renderItems();
-                } else { showError("數量已滿"); }
-            } else { showError("條碼錯誤：" + code); }
+                    flashRow(code);
+                } else { showError(`[${item.name}] 數量已達上限`); }
+            } else { showError(`條碼 ${code} 不在此單中`); }
         }
 
         function renderItems() {
             const list = document.getElementById('itemList');
             list.innerHTML = '';
             allOrders[currentOrderId].forEach(i => {
-                const done = i.current >= i.target;
+                const isDone = i.current >= i.target;
                 const row = document.createElement('div');
-                row.className = `item-row ${done ? 'completed' : ''}`;
+                row.id = `row-${i.barcode}`;
+                row.className = `item-row ${isDone ? 'completed' : ''}`;
                 row.innerHTML = `<div><b>${i.name}</b><br><small>${i.barcode}</small></div>
-                                 <div><b>${i.current} / ${i.target}</b></div>`;
+                                 <div style="font-weight:bold;">${i.current} / ${i.target}</div>`;
                 list.appendChild(row);
             });
         }
 
-        // --- 4. 雲端回傳 ---
+        // 4. 回傳至 Google 試算表
         async function uploadToCloud() {
             const data = allOrders[currentOrderId].map(i => ({
                 orderId: currentOrderId, barcode: i.barcode, name: i.name, target: i.target, current: i.current
             }));
-            if (!confirm("確定要將結果回傳至 Google 試算表？")) return;
+
+            if (!confirm("確定將掃描結果回傳至雲端試算表？")) return;
+
             try {
-                await fetch(REPORT_API, { method: 'POST', mode: 'no-cors', body: JSON.stringify(data) });
-                alert("✅ 回傳請求已送出！請檢查試算表『出貨紀錄』分頁。");
-            } catch (e) { alert("❌ 回傳失敗"); }
+                const btn = document.querySelector('.btn-green');
+                btn.innerText = "正在傳送...";
+                btn.disabled = true;
+
+                await fetch(REPORT_API_URL, {
+                    method: 'POST',
+                    mode: 'no-cors', // 配合 Google Script 的安全限制
+                    body: JSON.stringify(data)
+                });
+                
+                alert("✅ 傳送指令已送出！請刷新 Google 試算表的「出貨紀錄」分頁查看。");
+                btn.innerText = "☁️ 同步回傳至 Google 試算表";
+                btn.disabled = false;
+            } catch (e) {
+                alert("❌ 傳送過程發生錯誤");
+                btn.disabled = false;
+            }
         }
 
+        // 輔助功能
         function stopCamera() { if(html5QrCode) html5QrCode.stop(); }
         function backToTasks() { document.getElementById('taskSection').style.display='block'; document.getElementById('workArea').style.display='none'; stopCamera(); }
-        function showError(m) { document.getElementById('sndError').play(); document.getElementById('errorMsg').innerText = m; document.getElementById('errorOverlay').style.display = 'flex'; }
+        function showError(msg) { document.getElementById('sndError').play(); document.getElementById('errorMsg').innerText = msg; document.getElementById('errorOverlay').style.display = 'flex'; }
+        function flashRow(barcode) {
+            const el = document.getElementById(`row-${barcode}`);
+            el.classList.add('active-hit');
+            setTimeout(() => el.classList.remove('active-hit'), 500);
+        }
+        function exportResults() {
+            const data = allOrders[currentOrderId].map(i => ({ '單號': currentOrderId, '條碼': i.barcode, '名稱': i.name, '應出': i.target, '實出': i.current }));
+            const ws = XLSX.utils.json_to_sheet(data);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "報告");
+            XLSX.writeFile(wb, `掃描報告_${currentOrderId}.xlsx`);
+        }
         
-        // 監聽掃描槍
+        // 監聽鍵盤/掃描槍
         document.getElementById('scanInput').addEventListener('keydown', (e) => {
             if (e.key === 'Enter') { handleBarcode(e.target.value.trim()); e.target.value = ''; }
         });
 
+        // 啟動時自動同步一次
         window.onload = fetchCloudTasks;
     </script>
 </body>
